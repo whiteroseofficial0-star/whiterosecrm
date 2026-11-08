@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { Plus, MoreHorizontal, Pencil, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -79,7 +80,11 @@ export function TeamPage() {
   const [addPreset, setAddPreset] = React.useState<"sales" | null>(null);
   const [editOpen, setEditOpen] = React.useState(false);
   const [editUser, setEditUser] = React.useState<TeamUser | null>(null);
+  const [removeUser, setRemoveUser] = React.useState<TeamUser | null>(null);
+  const [removing, setRemoving] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
 
   const [form, setForm] = React.useState({
     name: "",
@@ -191,17 +196,22 @@ export function TeamPage() {
     }
   };
 
-  const handleDeactivate = async (id: string) => {
-    if (!confirm("Are you sure you want to deactivate this team member?")) return;
+  const handleRemove = async () => {
+    if (!removeUser) return;
+    setRemoving(true);
     try {
-      const res = await fetch(`/api/team/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to deactivate");
-      setUsers((prev) =>
-        prev.map((u) => (u.id === id ? { ...u, status: "INACTIVE" } : u))
-      );
-      toast.success("Team member deactivated");
-    } catch {
-      toast.error("Failed to deactivate team member");
+      const res = await fetch(`/api/team/${removeUser.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || "Failed to remove team member");
+      }
+      setUsers((prev) => prev.filter((u) => u.id !== removeUser.id));
+      setRemoveUser(null);
+      toast.success(`${removeUser.name} removed from the team`);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to remove team member");
+    } finally {
+      setRemoving(false);
     }
   };
 
@@ -297,13 +307,13 @@ export function TeamPage() {
                             <Pencil className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
-                          {user.status !== "INACTIVE" && (
+                          {user.id !== currentUserId && (
                             <DropdownMenuItem
-                              onClick={() => handleDeactivate(user.id)}
+                              onClick={() => setRemoveUser(user)}
                               className="text-red-600 focus:text-red-600"
                             >
                               <UserX className="mr-2 h-4 w-4" />
-                              Deactivate
+                              Remove member
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
@@ -365,6 +375,33 @@ export function TeamPage() {
             <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
             <Button onClick={handleAdd} disabled={submitting}>
               {submitting ? "Creating..." : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove Confirmation Dialog */}
+      <Dialog open={removeUser !== null} onOpenChange={(open) => { if (!open) setRemoveUser(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove {removeUser?.name}?</DialogTitle>
+            <DialogDescription>
+              This permanently removes the team member and their login. Leads or
+              proposals they created, and their notes, are transferred to you.
+              Their assigned follow-ups, tasks and meetings are unassigned.
+              Notifications and activity history of this user are deleted. This
+              action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+            <p><span className="font-medium">Name:</span> {removeUser?.name}</p>
+            <p><span className="font-medium">Email:</span> {removeUser?.email}</p>
+            <p><span className="font-medium">Role:</span> {removeUser?.role?.label}</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemoveUser(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleRemove} disabled={removing}>
+              {removing ? "Removing..." : "Remove member"}
             </Button>
           </DialogFooter>
         </DialogContent>

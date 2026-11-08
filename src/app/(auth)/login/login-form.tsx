@@ -32,9 +32,8 @@ export default function LoginForm() {
       toast.error("Server unreachable. Check the deployment's database settings.");
       return;
     }
-    setLoading(false);
-
     if (res?.error) {
+      setLoading(false);
       // "CredentialsSignin" is a wrong email/password. Anything else means the
       // server could not verify the credentials (typically a database problem),
       // so say that instead of blaming the user's input.
@@ -45,7 +44,40 @@ export default function LoginForm() {
       );
       return;
     }
-    toast.success("Welcome back WhiteRose");
+
+    // Session is set now; fetch it so the welcome message greets the exact
+    // person who signed in (e.g. "Welcome, Rachit!" + role), instead of a
+    // generic WhiteRose message. Never block the navigation on this.
+    let welcomeName = "";
+    let welcomeRole = "";
+    try {
+      const sessionRes = await fetch("/api/auth/session");
+      const session = (await sessionRes.json()) as {
+        user?: { name?: string | null; email?: string | null; role?: string };
+      } | null;
+      const user = session?.user;
+      welcomeName =
+        user?.name?.trim() ||
+        user?.email?.split("@")[0]?.replace(/[._-]+/g, " ")?.trim() ||
+        "";
+      const roleLabels: Record<string, string> = {
+        SUPER_ADMIN: "Super Admin",
+        ADMIN: "Admin",
+        SALES_EXECUTIVE: "Sales Executive",
+        DEVELOPER: "Developer / Project Team",
+      };
+      welcomeRole = (user?.role && roleLabels[user.role]) || "";
+    } catch {
+      // Ignore: a generic welcome is shown instead.
+    }
+
+    const firstName = welcomeName.split(" ")[0];
+    toast.success(
+      welcomeName
+        ? `Welcome, ${firstName}!${welcomeRole ? ` Signed in as ${welcomeRole}.` : ""}`
+        : "Welcome back!",
+    );
+    setLoading(false);
     router.push(searchParams.get("callbackUrl") || "/dashboard");
   }
 

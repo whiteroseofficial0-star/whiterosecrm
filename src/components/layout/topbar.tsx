@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Bell, Sun, Moon, Menu, LogOut } from "lucide-react";
+import { Search, Bell, Sun, Moon, Menu, LogOut, KeyRound } from "lucide-react";
+import { ChangePasswordDialog } from "@/components/account/change-password-dialog";
 import { signOut } from "next-auth/react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ export function Topbar({
 }) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -95,6 +97,10 @@ export function Topbar({
               )}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setPasswordOpen(true)}>
+              <Icon icon={KeyRound} className="h-4 w-4" />
+              Change password
+            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => signOut({ callbackUrl: "/login" })}
               className="text-red-600 focus:text-red-600 dark:focus:text-red-400"
@@ -105,6 +111,7 @@ export function Topbar({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
     </header>
   );
 }

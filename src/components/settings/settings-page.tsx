@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, LogOut } from "lucide-react";
+import { Plus, Pencil, Trash2, LogOut, KeyRound } from "lucide-react";
+import { ChangePasswordDialog } from "@/components/account/change-password-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -60,6 +61,7 @@ export function SettingsPage() {
   const [templateMessage, setTemplateMessage] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [loggingOut, setLoggingOut] = React.useState(false);
+  const [passwordOpen, setPasswordOpen] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -294,6 +296,20 @@ export function SettingsPage() {
           <CardHeader><CardTitle>Account</CardTitle></CardHeader>
           <CardContent className="space-y-6">
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+              <h3 className="text-sm font-medium text-slate-900 dark:text-white">Password</h3>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Change the password you use to sign in.
+              </p>
+              <Button
+                variant="outline"
+                className="mt-3"
+                onClick={() => setPasswordOpen(true)}
+              >
+                <KeyRound className="mr-2 h-4 w-4" />
+                Change Password
+              </Button>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
               <h3 className="text-sm font-medium text-slate-900 dark:text-white">Sign Out</h3>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 Sign out of your account. You will need to log in again to access the dashboard.
@@ -314,6 +330,8 @@ export function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
 
       {/* Template Dialog */}
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>

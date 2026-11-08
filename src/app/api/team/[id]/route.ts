@@ -129,16 +129,56 @@ export async function DELETE(
   }
 
   const { id } = await params;
+  const actorId = session.user.id;
+  if (!actorId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  const existing = await prisma.user.findUnique({ where: { id } });
+  // Nobody can remove their own account through the team screen.
+  if (id === actorId) {
+    return NextResponse.json({ error: "You cannot remove your own account" }, { status: 400 });
+  }
+
+  const existing = await prisma.user.findUnique({
+    where: { id },
+    include: { role: { select: { name: true } } },
+  });
   if (!existing) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  await prisma.user.update({
-    where: { id },
-    data: { status: "INACTIVE" },
-  });
+  // Admins cannot remove a super admin; the last super admin is protected.
+  if (existing.role.name === "SUPER_ADMIN") {
+    if (session.user.role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Only a super admin can remove a super admin" }, { status: 403 });
+    }
+    const otherSuperAdmins = await prisma.user.count({
+      where: { role: { name: "SUPER_ADMIN" }, status: "ACTIVE", id: { not: id } },
+    });
+    if (otherSuperAdmins === 0) {
+      return NextResponse.json({ error: "At least one active super admin is required" }, { status: 400 });
+    }
+  }
+
+  // Removing the member must not orphan records that require an owner
+  // (created leads, proposals, notes): those are handed to the person doing
+  // the removal. Optional assignments are simply unassigned.
+  await prisma.$transaction([
+    prisma.lead.updateMany({ where: { assignedToId: id }, data: { assignedToId: null } }),
+    prisma.lead.updateMany({ where: { createdById: id }, data: { createdById: actorId } }),
+    prisma.followUp.updateMany({ where: { assignedToId: id }, data: { assignedToId: null } }),
+    prisma.task.updateMany({ where: { assignedToId: id }, data: { assignedToId: null } }),
+    prisma.meeting.updateMany({ where: { assignedToId: id }, data: { assignedToId: null } }),
+    prisma.proposal.updateMany({ where: { createdById: id }, data: { createdById: actorId } }),
+    prisma.client.updateMany({ where: { accountManagerId: id }, data: { accountManagerId: null } }),
+    prisma.project.updateMany({ where: { projectManagerId: id }, data: { projectManagerId: null } }),
+    prisma.note.updateMany({ where: { authorId: id }, data: { authorId: actorId } }),
+    prisma.notification.deleteMany({ where: { userId: id } }),
+    prisma.auditLog.updateMany({ where: { userId: id }, data: { userId: null } }),
+    prisma.leadActivity.updateMany({ where: { createdById: id }, data: { createdById: null } }),
+    prisma.document.updateMany({ where: { uploadedById: id }, data: { uploadedById: null } }),
+    prisma.user.delete({ where: { id } }),
+  ]);
 
   return NextResponse.json({ success: true });
 }
