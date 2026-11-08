@@ -20,15 +20,29 @@ export default function LoginForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const res = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    let res: { error?: string } | undefined;
+    try {
+      res = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+    } catch {
+      setLoading(false);
+      toast.error("Server unreachable. Check the deployment's database settings.");
+      return;
+    }
     setLoading(false);
 
     if (res?.error) {
-      toast.error("Invalid email or password.");
+      // "CredentialsSignin" is a wrong email/password. Anything else means the
+      // server could not verify the credentials (typically a database problem),
+      // so say that instead of blaming the user's input.
+      toast.error(
+        res.error === "CredentialsSignin"
+          ? "Invalid email or password."
+          : `Sign-in failed (${res.error}). The server could not reach the database.`,
+      );
       return;
     }
     toast.success("Welcome back WhiteRose");
