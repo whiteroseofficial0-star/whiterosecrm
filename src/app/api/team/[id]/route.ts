@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { hasPermission } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
 
 const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
@@ -11,6 +12,10 @@ const updateUserSchema = z.object({
   roleId: z.string().optional(),
   department: z.string().optional().nullable(),
   status: z.enum(["ACTIVE", "INACTIVE", "SUSPENDED"]).optional(),
+});
+
+const changePasswordSchema = z.object({
+  newPassword: z.string().min(6, "Password must be at least 6 characters"),
 });
 
 export async function GET(
@@ -181,4 +186,59 @@ export async function DELETE(
   ]);
 
   return NextResponse.json({ success: true });
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Only SUPER_ADMIN and ADMIN can change another user's password
+  if (session.user.role !== "SUPER_ADMIN" && session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params;
+  const body = await request.json();
+  const parsed = changePasswordSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.flatten().fieldErrors },
+      { status: 400 }
+    );
+  }
+
+  const existing = await prisma.user.findUnique({ where: { id } });
+  if (!existing) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  const passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
+  const user = await prisma.user.update({
+    where: { id },
+    data: { passwordHash },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      department: true,
+      status: true,
+      joinDate: true,
+      role: { select: { id: true, name: true, label: true } },
+      _count: {
+        select: {
+          leadsAssigned: { where: { isDeleted: false } },
+          projectsManaged: true,
+        },
+      },
+    },
+  });
+
+  return NextResponse.json(user);
 }
