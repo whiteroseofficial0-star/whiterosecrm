@@ -1,0 +1,25 @@
+diff --git a/node_modules/@opennextjs/cloudflare/dist/cli/build/bundle-server.js b/node_modules/@opennextjs/cloudflare/dist/cli/build/bundle-server.js
+index be3f893..81ce3eb 100644
+--- a/node_modules/@opennextjs/cloudflare/dist/cli/build/bundle-server.js
++++ b/node_modules/@opennextjs/cloudflare/dist/cli/build/bundle-server.js
+@@ -2,6 +2,8 @@ import fs from "node:fs";
+ import { readFile, writeFile } from "node:fs/promises";
+ import path from "node:path";
+ import { fileURLToPath } from "node:url";
++import { createRequire } from "node:module";
++const require = createRequire(import.meta.url);
+ import { getPackagePath } from "@opennextjs/aws/build/helper.js";
+ import * as buildHelper from "@opennextjs/aws/build/helper.js";
+ import { ContentUpdater } from "@opennextjs/aws/plugins/content-updater.js";
+@@ -124,6 +126,13 @@ export async function bundleServer(buildOpts, projectOpts) {
+             // `@next/env` is used by Next to load environment variables from files.
+             // OpenNext inlines the values at build time so this is not needed.
+             "@next/env": path.join(buildOpts.outputDir, "cloudflare-templates/shims/env.js"),
++            // Turbopack emits Prisma chunks that require `@prisma/client-<hash>` as if
++            // it was a separate package. It is not — this is a content-hashed identifier
++            // for the actual `@prisma/client` package. Alias it back so esbuild can
++            // resolve it.
++            "@prisma/client-2c3a283f134fdcb6": require.resolve("@prisma/client"),
+         },
+         define: {
+             // config file used by Next.js, see: https://github.com/vercel/next.js/blob/68a7128/packages/next/src/build/utils.ts#L2137-L2139

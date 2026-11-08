@@ -1,0 +1,16 @@
+diff --git a/node_modules/@opennextjs/aws/dist/build/copyTracedFiles.js b/node_modules/@opennextjs/aws/dist/build/copyTracedFiles.js
+index 9701b04..2617f2d 100644
+--- a/node_modules/@opennextjs/aws/dist/build/copyTracedFiles.js
++++ b/node_modules/@opennextjs/aws/dist/build/copyTracedFiles.js
+@@ -31,6 +31,12 @@ const EXCLUDED_PACKAGES = [
+     "next/dist/compiled/babel",
+     "next/dist/compiled/babel-packages",
+     "next/dist/compiled/amphtml-validator",
++    // Turbopack content-hashed Prisma require traces — these are not real
++    // packages, they are hash-suffixed require calls emitted by the bundler.
++    // They are already resolved at bundle time via the alias map in
++    // `bundle-server.js`, so they should be skipped here.
++    "@prisma/client-2c3a283f134fdcb6",
+ ];
+ export function isExcluded(srcPath) {
+     return EXCLUDED_PACKAGES.some((excluded) => 

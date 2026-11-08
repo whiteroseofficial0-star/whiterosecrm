@@ -1,0 +1,659 @@
+// WhiteRose CRM — Database Schema (MongoDB)
+// Covers: Auth/RBAC, Leads, Follow-ups, Tasks, Meetings, Proposals,
+// Clients, Projects, Payments, Documents, Notes, Notifications,
+// Settings, Audit Logs.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// AUTH / RBAC
+// ---------------------------------------------------------------------------
+
+enum RoleName {
+  SUPER_ADMIN
+  ADMIN
+  SALES_EXECUTIVE
+  DEVELOPER
+}
+
+model Role {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        RoleName @unique
+  label       String
+  description String?
+  permissions RolePermission[]
+  users       User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Permission {
+  id    String @id @default(auto()) @map("_id") @db.ObjectId
+  key   String @unique
+  label String
+  roles RolePermission[]
+}
+
+model RolePermission {
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  roleId       String     @db.ObjectId
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String     @db.ObjectId
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+model User {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  email         String    @unique
+  phone         String?
+  passwordHash  String
+  avatarUrl     String?
+  department    String?
+  status        UserStatus @default(ACTIVE)
+  roleId        String    @db.ObjectId
+  role          Role      @relation(fields: [roleId], references: [id])
+  joinDate      DateTime  @default(now())
+
+  resetToken       String?
+  resetTokenExpiry DateTime?
+
+  leadsAssigned     Lead[]           @relation("AssignedLeads")
+  leadsCreated      Lead[]           @relation("CreatedLeads")
+  followUps         FollowUp[]       @relation("AssignedFollowUps")
+  tasks             Task[]           @relation("AssignedTasks")
+  meetings          Meeting[]        @relation("AssignedMeetings")
+  proposalsCreated  Proposal[]       @relation("CreatedProposals")
+  clientsManaged    Client[]         @relation("AccountManager")
+  projectsManaged   Project[]        @relation("ProjectManager")
+  notes             Note[]           @relation("NoteAuthor")
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  activities        LeadActivity[]
+  documentsUploaded Document[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([roleId])
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+// ---------------------------------------------------------------------------
+// LOOKUP / SETTINGS TABLES (admin-editable)
+// ---------------------------------------------------------------------------
+
+model Industry {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String   @unique
+  isCustom  Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  leads     Lead[]
+  createdAt DateTime @default(now())
+}
+
+model LeadSource {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String   @unique
+  isCustom  Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  leads     Lead[]
+  createdAt DateTime @default(now())
+}
+
+enum ServiceCategory {
+  SOFTWARE_DEVELOPMENT
+  CYBERSECURITY
+  AUTOMATION
+  AI_SERVICES
+  OTHER
+}
+
+model Service {
+  id            String          @id @default(auto()) @map("_id") @db.ObjectId
+  name          String          @unique
+  category      ServiceCategory
+  defaultPrice  Float?
+  isActive      Boolean         @default(true)
+  leadServices  LeadService[]
+  proposalItems ProposalItem[]
+  createdAt     DateTime        @default(now())
+}
+
+model Area {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String   @unique
+  isCustom  Boolean  @default(false)
+  leads     Lead[]
+  createdAt DateTime @default(now())
+}
+
+model WhatsAppTemplate {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  category  String
+  message   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CompanySetting {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  companyName String   @default("WhiteRose")
+  logoUrl     String?
+  address     String?
+  phone       String?
+  email       String?
+  website     String?
+  gstNumber   String?
+  currency    String   @default("INR")
+  updatedAt   DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// LEADS
+// ---------------------------------------------------------------------------
+
+enum LeadStatus {
+  NEW_LEAD
+  CONTACTED
+  FOLLOW_UP
+  INTERESTED
+  DEMO_SCHEDULED
+  DEMO_COMPLETED
+  PROPOSAL_REQUESTED
+  PROPOSAL_SENT
+  NEGOTIATION
+  WON
+  LOST
+  ON_HOLD
+}
+
+enum LeadPriority {
+  HOT
+  WARM
+  COLD
+}
+
+model Lead {
+  id               String       @id @default(auto()) @map("_id") @db.ObjectId
+  businessName     String
+  contactPerson    String
+  position         String?
+  mobile           String
+  alternateMobile  String?
+  whatsapp         String?
+  email            String?
+  website          String?
+  instagram        String?
+  address          String?
+  areaId           String?      @db.ObjectId
+  area             Area?        @relation(fields: [areaId], references: [id])
+  city             String?
+  state            String?
+  pinCode          String?
+  googleMapsUrl    String?
+  latitude         Float?
+  longitude        Float?
+
+  industryId       String?      @db.ObjectId
+  industry         Industry?    @relation(fields: [industryId], references: [id])
+  customIndustry   String?
+
+  sourceId         String?      @db.ObjectId
+  source           LeadSource?  @relation(fields: [sourceId], references: [id])
+
+  status           LeadStatus   @default(NEW_LEAD)
+  priority         LeadPriority @default(WARM)
+  leadScore        Int          @default(0)
+  scoreOverridden  Boolean      @default(false)
+
+  dealValue        Float?
+  probability      Int?         @default(50)
+  expectedCloseDate DateTime?
+
+  lostReason       String?
+  lostNotes        String?
+
+  visitingCardUrl  String?
+
+  assignedToId     String?      @db.ObjectId
+  assignedTo       User?        @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  createdById      String       @db.ObjectId
+  createdBy        User         @relation("CreatedLeads", fields: [createdById], references: [id])
+
+  services         LeadService[]
+  activities       LeadActivity[]
+  followUps        FollowUp[]
+  tasks            Task[]
+  meetings         Meeting[]
+  proposals        Proposal[]
+  documents        Document[]
+  notes            Note[]
+  client           Client?
+
+  isDeleted        Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([status])
+  @@index([priority])
+  @@index([assignedToId])
+  @@index([mobile])
+  @@index([email])
+}
+
+model LeadService {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  leadId    String  @db.ObjectId
+  lead      Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  serviceId String  @db.ObjectId
+  service   Service @relation(fields: [serviceId], references: [id])
+
+  @@unique([leadId, serviceId])
+}
+
+model LeadActivity {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  leadId      String   @db.ObjectId
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type        String
+  description String
+  createdById String?  @db.ObjectId
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([leadId])
+}
+
+// ---------------------------------------------------------------------------
+// FOLLOW-UPS / TASKS / MEETINGS
+// ---------------------------------------------------------------------------
+
+enum FollowUpType {
+  PHONE_CALL
+  WHATSAPP
+  VISIT
+  EMAIL
+  DEMO
+  MEETING
+  PROPOSAL_DISCUSSION
+  PAYMENT_FOLLOW_UP
+  OTHER
+}
+
+enum FollowUpStatus {
+  PENDING
+  COMPLETED
+  RESCHEDULED
+  CANCELLED
+}
+
+model FollowUp {
+  id           String         @id @default(auto()) @map("_id") @db.ObjectId
+  leadId       String?        @db.ObjectId
+  lead         Lead?          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  clientId     String?        @db.ObjectId
+  client       Client?        @relation(fields: [clientId], references: [id])
+  date         DateTime
+  time         String
+  type         FollowUpType
+  purpose      String
+  reminderMins Int?
+  notes        String?
+  status       FollowUpStatus @default(PENDING)
+  assignedToId String?        @db.ObjectId
+  assignedTo   User?          @relation("AssignedFollowUps", fields: [assignedToId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date, status])
+  @@index([leadId])
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Task {
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  title        String
+  description  String?
+  leadId       String?      @db.ObjectId
+  lead         Lead?        @relation(fields: [leadId], references: [id])
+  clientId     String?      @db.ObjectId
+  client       Client?      @relation(fields: [clientId], references: [id])
+  projectId    String?      @db.ObjectId
+  project      Project?     @relation(fields: [projectId], references: [id])
+  assignedToId String?      @db.ObjectId
+  assignedTo   User?        @relation("AssignedTasks", fields: [assignedToId], references: [id])
+  priority     TaskPriority @default(MEDIUM)
+  dueDate      DateTime?
+  dueTime      String?
+  status       TaskStatus   @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum MeetingType {
+  PHYSICAL_MEETING
+  ONLINE_MEETING
+  PRODUCT_DEMO
+  REQUIREMENT_DISCUSSION
+  PROPOSAL_DISCUSSION
+  PROJECT_MEETING
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+}
+
+model Meeting {
+  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  leadId        String?       @db.ObjectId
+  lead          Lead?         @relation(fields: [leadId], references: [id])
+  clientId      String?       @db.ObjectId
+  client        Client?       @relation(fields: [clientId], references: [id])
+  type          MeetingType
+  date          DateTime
+  time          String
+  durationMins  Int?
+  location      String?
+  meetUrl       String?
+  purpose       String?
+  notes         String?
+  status        MeetingStatus @default(SCHEDULED)
+  assignedToId  String?       @db.ObjectId
+  assignedTo    User?         @relation("AssignedMeetings", fields: [assignedToId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// PROPOSALS
+// ---------------------------------------------------------------------------
+
+enum ProposalStatus {
+  DRAFT
+  SENT
+  VIEWED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+model Proposal {
+  id             String         @id @default(auto()) @map("_id") @db.ObjectId
+  proposalNumber String         @unique
+  leadId         String?        @db.ObjectId
+  lead           Lead?          @relation(fields: [leadId], references: [id])
+  clientId       String?        @db.ObjectId
+  client         Client?        @relation(fields: [clientId], references: [id])
+  date           DateTime       @default(now())
+  validUntil     DateTime?
+  subtotal       Float
+  discount       Float          @default(0)
+  tax            Float          @default(0)
+  total          Float
+  notes          String?
+  terms          String?
+  status         ProposalStatus @default(DRAFT)
+  pdfUrl         String?
+  items          ProposalItem[]
+  createdById    String         @db.ObjectId
+  createdBy      User           @relation("CreatedProposals", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProposalItem {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  proposalId String   @db.ObjectId
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  serviceId  String?  @db.ObjectId
+  service    Service? @relation(fields: [serviceId], references: [id])
+  name       String
+  quantity   Int      @default(1)
+  price      Float
+  total      Float
+}
+
+// ---------------------------------------------------------------------------
+// CLIENTS / PROJECTS / PAYMENTS
+// ---------------------------------------------------------------------------
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  ON_HOLD
+}
+
+model Client {
+  id                 String       @id @default(auto()) @map("_id") @db.ObjectId
+  leadId             String?      @unique @db.ObjectId
+  lead               Lead?        @relation(fields: [leadId], references: [id])
+  businessName       String
+  contactPerson      String
+  mobile             String
+  whatsapp           String?
+  email              String?
+  address            String?
+  finalDealValue     Float?
+  startDate          DateTime?
+  status             ClientStatus @default(ACTIVE)
+  accountManagerId   String?      @db.ObjectId
+  accountManager     User?        @relation("AccountManager", fields: [accountManagerId], references: [id])
+
+  projects   Project[]
+  payments   Payment[]
+  proposals  Proposal[]
+  documents  Document[]
+  notes      Note[]
+  tasks      Task[]
+  followUps  FollowUp[]
+  meetings   Meeting[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum ProjectStatus {
+  PLANNING
+  REQUIREMENT_GATHERING
+  DESIGN
+  DEVELOPMENT
+  TESTING
+  CLIENT_REVIEW
+  DEPLOYMENT
+  MAINTENANCE
+  COMPLETED
+  ON_HOLD
+  CANCELLED
+}
+
+model Project {
+  id               String        @id @default(auto()) @map("_id") @db.ObjectId
+  name             String
+  clientId         String        @db.ObjectId
+  client           Client        @relation(fields: [clientId], references: [id])
+  serviceType      String?
+  description      String?
+  projectValue     Float?
+  startDate        DateTime?
+  deadline         DateTime?
+  projectManagerId String?       @db.ObjectId
+  projectManager   User?         @relation("ProjectManager", fields: [projectManagerId], references: [id])
+  priority         TaskPriority  @default(MEDIUM)
+  status           ProjectStatus @default(PLANNING)
+  progress         Int           @default(0)
+
+  tasks     Task[]
+  payments  Payment[]
+  documents Document[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  BANK_TRANSFER
+  CHEQUE
+  CARD
+  RAZORPAY
+  OTHER
+}
+
+model Payment {
+  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  projectId     String?       @db.ObjectId
+  project       Project?      @relation(fields: [projectId], references: [id])
+  clientId      String        @db.ObjectId
+  client        Client        @relation(fields: [clientId], references: [id])
+  totalAmount   Float
+  paidAmount    Float         @default(0)
+  dueDate       DateTime?
+  method        PaymentMethod?
+  transactionId String?
+  status        PaymentStatus @default(PENDING)
+  notes         String?
+  installments  PaymentInstallment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum InstallmentStatus {
+  PENDING
+  PAID
+  OVERDUE
+}
+
+model PaymentInstallment {
+  id        String            @id @default(auto()) @map("_id") @db.ObjectId
+  paymentId String            @db.ObjectId
+  payment   Payment           @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  label     String
+  amount    Float
+  dueDate   DateTime?
+  paidDate  DateTime?
+  status    InstallmentStatus @default(PENDING)
+}
+
+// ---------------------------------------------------------------------------
+// DOCUMENTS / NOTES / NOTIFICATIONS / AUDIT
+// ---------------------------------------------------------------------------
+
+model Document {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  leadId       String?  @db.ObjectId
+  lead         Lead?    @relation(fields: [leadId], references: [id])
+  clientId     String?  @db.ObjectId
+  client       Client?  @relation(fields: [clientId], references: [id])
+  projectId    String?  @db.ObjectId
+  project      Project? @relation(fields: [projectId], references: [id])
+  name         String
+  url          String
+  fileType     String
+  fileSize     Int?
+  uploadedById String?  @db.ObjectId
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+}
+
+model Note {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  leadId    String?  @db.ObjectId
+  lead      Lead?    @relation(fields: [leadId], references: [id])
+  clientId  String?  @db.ObjectId
+  client    Client?  @relation(fields: [clientId], references: [id])
+  content   String
+  authorId  String   @db.ObjectId
+  author    User     @relation("NoteAuthor", fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum NotificationType {
+  FOLLOW_UP_REMINDER
+  OVERDUE_FOLLOW_UP
+  DEMO_REMINDER
+  MEETING_REMINDER
+  TASK_DEADLINE
+  PROPOSAL_EXPIRATION
+  PAYMENT_DUE
+  PROJECT_DEADLINE
+}
+
+model Notification {
+  id        String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String            @db.ObjectId
+  user      User              @relation(fields: [userId], references: [id])
+  type      NotificationType
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean           @default(false)
+  createdAt DateTime          @default(now())
+
+  @@index([userId, isRead])
+}
+
+model AuditLog {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String?  @db.ObjectId
+  user          User?    @relation(fields: [userId], references: [id])
+  action        String
+  entity        String
+  entityId      String
+  previousValue Json?
+  newValue      Json?
+  createdAt     DateTime @default(now())
+
+  @@index([entity, entityId])
+}

@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* Enable class-based dark mode (toggled via ThemeProvider) instead of
+   relying on prefers-color-scheme only. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #ffffff;
+  --foreground: #0f172a;
+}
+
+.dark {
+  --background: #020617;
+  --foreground: #f1f5f9;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
