@@ -1,4 +1,31 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
+
+// Fingerprints DATABASE_URL without exposing the password: enough to tell a
+// placeholder or a typo apart from a value that is actually correct.
+function urlDebug(raw: string) {
+  const trimmed = raw.trim();
+  const out: Record<string, unknown> = {
+    length: raw.length,
+    trimmedLength: trimmed.length,
+    hasWhitespace: trimmed !== raw,
+    hasPlaceholder: /<|>|db_password|password/i.test(raw),
+  };
+  try {
+    const parsed = new URL(trimmed);
+    const password = decodeURIComponent(parsed.password);
+    out.scheme = parsed.protocol.replace(/:$/, "");
+    out.username = decodeURIComponent(parsed.username);
+    out.host = parsed.host;
+    out.database = parsed.pathname.replace(/^\//, "") || "(none)";
+    out.params = parsed.search;
+    out.passwordLength = password.length;
+    out.passwordSha256 = createHash("sha256").update(password).digest("hex").slice(0, 16);
+  } catch {
+    out.parseError = true;
+  }
+  return out;
+}
 
 // Deployment diagnostics: reports only booleans (never values) so a missing
 // AUTH_SECRET / DATABASE_URL on the host can be spotted without log access.
@@ -11,7 +38,7 @@ export async function GET() {
     NEXT_PUBLIC_APP_URL: Boolean(process.env.NEXT_PUBLIC_APP_URL),
   };
 
-  let database: { ok: boolean; error?: string; detail?: string } = { ok: false };
+  let database: Record<string, unknown> & { ok: boolean } = { ok: false };
   if (!env.DATABASE_URL) {
     database = { ok: false, error: "DATABASE_URL not set" };
   } else {
@@ -30,6 +57,7 @@ export async function GET() {
         ok: false,
         error: error instanceof Error ? error.name : "UnknownError",
         detail,
+        url: urlDebug(process.env.DATABASE_URL ?? ""),
       };
     }
   }
