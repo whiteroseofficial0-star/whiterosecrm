@@ -11,7 +11,7 @@ export async function GET() {
     NEXT_PUBLIC_APP_URL: Boolean(process.env.NEXT_PUBLIC_APP_URL),
   };
 
-  let database: { ok: boolean; error?: string } = { ok: false };
+  let database: { ok: boolean; error?: string; detail?: string } = { ok: false };
   if (!env.DATABASE_URL) {
     database = { ok: false, error: "DATABASE_URL not set" };
   } else {
@@ -20,7 +20,17 @@ export async function GET() {
       await prisma.user.findFirst({ select: { id: true } });
       database = { ok: true };
     } catch (error) {
-      database = { ok: false, error: error instanceof Error ? error.name : "UnknownError" };
+      const raw = error instanceof Error ? error.message : String(error);
+      // Keep the host's error text for diagnostics, but never the credentials
+      // embedded in a connection string.
+      const detail = raw
+        .replace(/mongodb(\+srv)?:\/\/[^@\s]*@/gi, "mongodb://***@")
+        .slice(0, 300);
+      database = {
+        ok: false,
+        error: error instanceof Error ? error.name : "UnknownError",
+        detail,
+      };
     }
   }
 

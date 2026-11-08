@@ -5,6 +5,8 @@
 
 generator client {
   provider = "prisma-client-js"
+  // "native" for local dev; Netlify/other hosts run functions on Amazon Linux.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
