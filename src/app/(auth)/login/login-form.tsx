@@ -17,6 +17,22 @@ export default function LoginForm() {
   const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
 
+  // Ask the diagnostics endpoint why the server rejected the sign-in. Its
+  // database error is already credential-redacted and truncated, so it is safe
+  // to show on the public login screen and spares a trip to the host logs.
+  async function healthDetail(): Promise<string | undefined> {
+    try {
+      const healthRes = await fetch("/api/health", { cache: "no-store" });
+      const health = (await healthRes.json()) as {
+        database?: { ok?: boolean; detail?: string; error?: string };
+      };
+      if (health?.database?.ok) return undefined;
+      return health?.database?.detail ?? health?.database?.error;
+    } catch {
+      return undefined;
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -43,7 +59,19 @@ export default function LoginForm() {
         AccessDenied: "This account is not allowed to sign in (AccessDenied).",
         Verification: "This sign-in link is invalid or has expired (Verification).",
       };
-      toast.error(messages[res.error] ?? `Sign-in failed (${res.error}).`);
+      const message = messages[res.error] ?? `Sign-in failed (${res.error}).`;
+      // A credential mismatch points at the input; anything else is a server
+      // problem, so attach the health check's own reason for it.
+      if (res.error === "CredentialsSignin") {
+        toast.error(message);
+        return;
+      }
+      const detail = await healthDetail();
+      if (detail) {
+        toast.error(message, { description: detail });
+      } else {
+        toast.error(message);
+      }
       return;
     }
 
