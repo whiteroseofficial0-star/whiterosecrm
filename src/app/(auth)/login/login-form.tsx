@@ -29,19 +29,21 @@ export default function LoginForm() {
       });
     } catch {
       setLoading(false);
-      toast.error("Server unreachable. Check the deployment's database settings.");
+      toast.error("Could not reach the server. Check that the deployment is running.");
       return;
     }
     if (res?.error) {
       setLoading(false);
-      // "CredentialsSignin" is a wrong email/password. Anything else means the
-      // server could not verify the credentials (typically a database problem),
-      // so say that instead of blaming the user's input.
-      toast.error(
-        res.error === "CredentialsSignin"
-          ? "Invalid email or password."
-          : `Sign-in failed (${res.error}). The server could not reach the database.`,
-      );
+      // Auth.js returns a machine-readable reason. Report that reason instead of
+      // assuming every non-credential failure is a database outage.
+      const messages: Record<string, string> = {
+        CredentialsSignin: "Invalid email or password.",
+        Configuration:
+          "Server configuration error (Configuration). Check /api/health and the deployment logs.",
+        AccessDenied: "This account is not allowed to sign in (AccessDenied).",
+        Verification: "This sign-in link is invalid or has expired (Verification).",
+      };
+      toast.error(messages[res.error] ?? `Sign-in failed (${res.error}).`);
       return;
     }
 

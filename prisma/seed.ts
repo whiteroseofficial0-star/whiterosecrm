@@ -5,18 +5,31 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Force override env vars from .env file (system env may have stale PostgreSQL URL)
+// Load .env for local runs, but never override what the host already provides:
+// on Render (or any shell) DATABASE_URL comes from the environment and there
+// is no .env file, so this must not fail when the file is missing.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const envPath = path.resolve(__dirname, "..", ".env");
-const envContent = fs.readFileSync(envPath, "utf-8");
-for (const line of envContent.split("\n")) {
-  const trimmed = line.trim();
-  if (!trimmed || trimmed.startsWith("#")) continue;
-  const eqIdx = trimmed.indexOf("=");
-  if (eqIdx === -1) continue;
-  const key = trimmed.slice(0, eqIdx).trim();
-  const val = trimmed.slice(eqIdx + 1).trim().replace(/^"|"$/g, "");
-  process.env[key] = val;
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, "utf-8");
+  for (const line of envContent.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    if (process.env[key] !== undefined) continue;
+    const val = trimmed.slice(eqIdx + 1).trim().replace(/^"|"$/g, "");
+    process.env[key] = val;
+  }
+}
+
+if (!process.env.DATABASE_URL) {
+  console.error(
+    "DATABASE_URL is not set. Export it before seeding, e.g.\n" +
+      '  DATABASE_URL="mongodb+srv://..." npm run db:seed'
+  );
+  process.exit(1);
 }
 
 const prisma = new PrismaClient();
