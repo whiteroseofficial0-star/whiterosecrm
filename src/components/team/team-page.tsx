@@ -72,6 +72,22 @@ interface Role {
   label: string;
 }
 
+// /api/team reports validation failures as { error: { field: [message] } } and
+// everything else as { error: "..." }. Surface whichever one applies instead of
+// always falling back to a generic message.
+function apiErrorMessage(payload: unknown, fallback: string): string {
+  const error = (payload as { error?: unknown } | null)?.error;
+  if (typeof error === "string" && error.trim()) return error;
+  if (error && typeof error === "object") {
+    for (const messages of Object.values(error as Record<string, unknown>)) {
+      if (Array.isArray(messages) && typeof messages[0] === "string" && messages[0]) {
+        return messages[0];
+      }
+    }
+  }
+  return fallback;
+}
+
 export function TeamPage() {
   const [users, setUsers] = React.useState<TeamUser[]>([]);
   const [roles, setRoles] = React.useState<Role[]>([]);
@@ -85,6 +101,10 @@ export function TeamPage() {
   const [submitting, setSubmitting] = React.useState(false);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
+  // Mirrors the role check in POST /api/team, so the buttons stay hidden for
+  // anyone the endpoint would reject anyway.
+  const canManageTeam =
+    session?.user?.role === "SUPER_ADMIN" || session?.user?.role === "ADMIN";
 
   const [form, setForm] = React.useState({
     name: "",
@@ -156,8 +176,12 @@ export function TeamPage() {
         body: JSON.stringify(form),
       });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error?.email?.[0] || "Failed to create user");
+        const err = await res.json().catch(() => null);
+        throw new Error(
+          res.status === 401 || res.status === 403
+            ? "You need to sign in as an administrator to add team members"
+            : apiErrorMessage(err, `Failed to create user (HTTP ${res.status})`)
+        );
       }
       const newUser = await res.json();
       setUsers((prev) => [newUser, ...prev]);
@@ -181,8 +205,12 @@ export function TeamPage() {
         body: JSON.stringify(editForm),
       });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error?.email?.[0] || "Failed to update user");
+        const err = await res.json().catch(() => null);
+        throw new Error(
+          res.status === 401 || res.status === 403
+            ? "You need to sign in as an administrator to update team members"
+            : apiErrorMessage(err, `Failed to update user (HTTP ${res.status})`)
+        );
       }
       const updated = await res.json();
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
@@ -243,16 +271,18 @@ export function TeamPage() {
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Team</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">{users.length} team members</p>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Button variant="outline" onClick={() => openAdd("sales")}>
-            <Plus className="h-4 w-4" />
-            Add Sales User
-          </Button>
-          <Button onClick={() => openAdd()}>
-            <Plus className="h-4 w-4" />
-            Add Team Member
-          </Button>
-        </div>
+        {canManageTeam && (
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button variant="outline" onClick={() => openAdd("sales")}>
+              <Plus className="h-4 w-4" />
+              Add Sales User
+            </Button>
+            <Button onClick={() => openAdd()}>
+              <Plus className="h-4 w-4" />
+              Add Team Member
+            </Button>
+          </div>
+        )}
       </div>
 
       <Card>

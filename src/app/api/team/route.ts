@@ -73,32 +73,42 @@ export async function POST(request: NextRequest) {
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
 
-  const user = await prisma.user.create({
-    data: {
-      name: parsed.data.name,
-      email: parsed.data.email.toLowerCase(),
-      phone: parsed.data.phone,
-      passwordHash,
-      roleId: parsed.data.roleId,
-      department: parsed.data.department,
-    },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      phone: true,
-      department: true,
-      status: true,
-      joinDate: true,
-      role: { select: { id: true, name: true, label: true } },
-      _count: {
-        select: {
-          leadsAssigned: { where: { isDeleted: false } },
-          projectsManaged: true,
+  try {
+    const user = await prisma.user.create({
+      data: {
+        name: parsed.data.name,
+        email: parsed.data.email.toLowerCase(),
+        phone: parsed.data.phone,
+        passwordHash,
+        roleId: parsed.data.roleId,
+        department: parsed.data.department,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        department: true,
+        status: true,
+        joinDate: true,
+        role: { select: { id: true, name: true, label: true } },
+        _count: {
+          select: {
+            leadsAssigned: { where: { isDeleted: false } },
+            projectsManaged: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  return NextResponse.json(user, { status: 201 });
+    return NextResponse.json(user, { status: 201 });
+  } catch (error) {
+    // Log the real cause for the deployment logs and hand a readable message
+    // back so the UI does not have to guess.
+    console.error("[api/team] creating user failed", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to create user" },
+      { status: 500 }
+    );
+  }
 }
