@@ -4,8 +4,13 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import type { RoleName } from "@/lib/rbac";
 
+// Auth.js v5 reads AUTH_SECRET by default. Fall back to the legacy
+// NEXTAUTH_SECRET name so either one works on hosting dashboards.
+const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
+  secret,
   session: { strategy: "jwt" },
   pages: {
     signIn: "/login",

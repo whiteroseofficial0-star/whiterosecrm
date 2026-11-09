@@ -1,0 +1,28 @@
+# Render Blueprint — deploy with "New +" -> "Blueprint" and point it at this repo.
+# An already-created service must still have these variables added under
+# Dashboard -> Environment; a blueprint only configures services it creates.
+services:
+  - type: web
+    name: whiterosecrm
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.4.1
+      # MongoDB Atlas connection string. Atlas must allow Render's egress IPs
+      # (0.0.0.0/0 is the simplest option); the app needs a replica set.
+      - key: DATABASE_URL
+        sync: false
+      # Signs the JWT session. Auth.js throws MissingSecret when this is absent.
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: AUTH_URL
+        sync: false
+      - key: NEXTAUTH_URL
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
